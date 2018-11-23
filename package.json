@@ -17,6 +17,8 @@
   },
   "homepage": "https://github.com/freemanlatrell/silent-santa#readme",
   "dependencies": {
-    "node-mailer": "^0.1.1"
+    "figlet": "^1.2.1",
+    "node-mailer": "^0.1.1",
+    "nodemailer": "^4.7.0"
   }
 }
