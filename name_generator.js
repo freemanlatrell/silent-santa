@@ -231,7 +231,7 @@ if (process.env.DB_URL === undefined) {
             }
 
             draw_names(secret_santa_list, significant_others, numbers);
-            //send_emails();
+            send_emails();
         }
     });
 }
