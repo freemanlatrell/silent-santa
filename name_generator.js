@@ -1,61 +1,30 @@
 const nodemailer = require('nodemailer');
 
-//Secret Santa List. TODO Move This list to Cloudant DB
-let secret_santa_list = {
-    "Latrell" : "freemanlatrell@gmail.com",
-    "Jessica": "adamsjessica27407@gmail.com",
-    "Jerohn": "jgilgilliam@gmail.com",
-    "Melissa": "mdavis0416@gmail.com",
-    "Sandra": "sadams562823@gmail.com",
-    "Lee": "labs299@suddenlink.net"
-
-};
-
-// Significant others list. This list will be used to confirm none of no one is matched with their significant other
-let significant_others = {
-    "Latrell": "Jessica",
-    "Jessica": "Latrell",
-    "Jerohn": "Melissa",
-    "Melissa": "Jerohn",
-    "Sandra": "Lee",
-    "Lee": "Sandra"
-};
-
-
-//Create an array of numbers to match the number of properties in the secret santa list
-// These numbers will be used to shuffle and pair names to their secret santa
-// Example numbers = [0,1,2,3,4,5]
-let numbers = [];
-let index = 0;
-
-for (let name in secret_santa_list) {
-    numbers.push(index);
-    index ++;
-}
-
 // Declare object to be used to extract significant other matches. We will eventually reshuffle this list also
 let significant_other_matches = {};
-
 let final_list = {};
 
 /**
  * This function is used to shuffle the numbers and match the names with their secret santa
+ * @param secret_santa_list Object containing list of secret santas
+ * @param significant_others Object containing list of significant others
+ * @param numbers Array of numbers to shuffle
  */
-function draw_names() {
+function draw_names(secret_santa_list, significant_others, numbers) {
     while (true) {
         let names = Object.keys(secret_santa_list);
         let reshuffle = 0;
         final_list = {};
 
         //Shuffle numbers
-        numbers = numbers.sort(function (a, b) {
+        let shuffled_numbers = numbers.sort(function (a, b) {
             return 0.5 - Math.random()
         });
 
         //Loop thru names in secret santa list and pair with a secret santa
         for (let i = 0; i < names.length; i++) {
             let selected_name = names[i];
-            let secret_santa = names[numbers[i]];
+            let secret_santa = names[shuffled_numbers[i]];
 
             //If anyone on the list is matched with themselves then we will reshuffle again
             //Else we add them to the final list
@@ -87,21 +56,21 @@ function draw_names() {
 
             if (Object.keys(significant_other_matches).length > 0) {
                 if (Object.keys(significant_other_matches).length === 1) { //If there's only one significant other match, then we have nothing to shuffle. Guess we'll just start over from the beginning and try again
-                    draw_names();
+                    draw_names(secret_santa_list, significant_others, numbers);
                 } else if (Object.keys(significant_other_matches).length === 2) { //Let's verify that 2 significant others don't have each other because it would be pointless to shuffle those
                     let names = Object.keys(significant_other_matches);
                     if ((significant_others[names[0]] === names[1]) &&  (significant_others[names[1]] === names[0])) {
-                        draw_names();
+                        draw_names(secret_santa_list, significant_others, numbers);
                     }
                 } else { // Else...shuffle significant others list
                     shuffle_sig_other_list(significant_other_matches, new_numbers);
-                    verify_final_list(final_list);
+                    verify_final_list(final_list, secret_santa_list, significant_others, numbers);
                     console.log("Final List after reshuffle...");
                     console.log(final_list);
                     break;
                 }
             } else {
-                verify_final_list(final_list);
+                verify_final_list(final_list, secret_santa_list, significant_others, numbers);
                 console.log("Final List...");
                 console.log(final_list);
                 break;
@@ -124,14 +93,14 @@ function shuffle_sig_other_list(significant_other_matches, new_numbers) {
         let second_final_list = {};
 
         //Shuffle new numbers
-        new_numbers = new_numbers.sort(function (a, b) {
+        let shuffled_new_numbers = new_numbers.sort(function (a, b) {
             return 0.5 - Math.random()
         });
 
         //Loop thru names in significant other names and pair with a new secret santa
         for (let i = 0; i < names.length; i++) {
             let selected_name = names[i];
-            let secret_santa = names[new_numbers[i]];
+            let secret_santa = names[shuffled_new_numbers[i]];
 
             //If anyone on the list is matched with themselves then we will reshuffle again
             //Else we add them to the final list
@@ -154,8 +123,11 @@ function shuffle_sig_other_list(significant_other_matches, new_numbers) {
 /**
  * Perform one final verification to check for duplicate secret santas and verify we don't have any more significant others paired together
  * @param final_list Object containing final list of secret santas
+ * @param secret_santa_list Object containing list of secret santas
+ * @param significant_others Object containing list of significant others
+ * @param numbers List of numbers to shuffle
  */
-function verify_final_list(final_list) {
+function verify_final_list(final_list, secret_santa_list, significant_others, numbers) {
     //Verify Dupes
     let keys = Object.keys(final_list);
     let dupe = false;
@@ -170,14 +142,14 @@ function verify_final_list(final_list) {
         if(dupe){
             console.log("dupe value is there..");
             console.log(final_list);
-            draw_names();
+            draw_names(secret_santa_list, significant_others, numbers);
         }
     }
 
     //Verify Significant Others one last time
     for (let name in final_list){
         if (final_list[name] === significant_others[name]){
-            draw_names()
+            draw_names(secret_santa_list, significant_others, numbers)
         }
     }
 }
@@ -224,5 +196,45 @@ function send_emails () {
 //****************//
 //STARTING POINT
 //***************//
-draw_names();
-send_emails();
+
+if (process.env.DB_URL === undefined) {
+    console.error('DB_URL required. This is the URL to access the Cloudant Database');
+    process.exit(1);
+} else if (process.env.DB_DOC_NAME === undefined){
+    console.error('DB_DOC_NAME required. This is the name of the document in the database');
+    process.exit(1);
+} else if (process.env.EMAIL_ADDRESS === undefined) {
+    console.error('EMAIL_ADDRESS required. This is the email address used for sending email notifications');
+    process.exit(1);
+} else if (process.env.EMAIL_PASSWORD === undefined) {
+    console.error('EMAIL_PASSWORD required. This is the email password for the email address used for sending email notifications');
+    process.exit(1);
+} else {
+    //Retrieve secret santa and significant others list from Cloudant
+    const db = require('nano')(process.env.DB_URL).use('secret_santa');
+    db.get(process.env.DB_DOC_NAME, {}, function(err, resp) { //doc_name, query parameters, callback
+        if (err) {
+            console.error(err);
+        } else {
+            let secret_santa_list = resp.secret_santa_list;
+            let significant_others = resp.significant_others;
+
+            //Create an array of numbers to match the number of properties in the secret santa list
+            // These numbers will be used to shuffle and pair names to their secret santa
+            // Example numbers = [0,1,2,3,4,5]
+            let numbers = [];
+            let index = 0;
+
+            for (let name in secret_santa_list) {
+                numbers.push(index);
+                index ++;
+            }
+
+            draw_names(secret_santa_list, significant_others, numbers);
+            //send_emails();
+        }
+    });
+}
+
+
+
