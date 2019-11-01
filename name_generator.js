@@ -73,9 +73,9 @@ function draw_names(secret_santa_list, significant_others, numbers) {
                 verify_final_list(final_list, secret_santa_list, significant_others, numbers);
                 console.log("Final List...");
                 console.log(final_list);
+                save_final_list(final_list);
                 break;
             }
-
         }
     }
 }
@@ -158,7 +158,7 @@ function verify_final_list(final_list, secret_santa_list, significant_others, nu
 /**
  * Send emails to everyone notifying them of their secret santas
  */
-function send_emails () {
+function send_emails (secret_santa_list) {
     const email_address = process.env.EMAIL_ADDRESS;
     const email_password = process.env.EMAIL_PASSWORD;
 
@@ -191,6 +191,27 @@ function send_emails () {
             }
         });
     }
+}
+
+function save_final_list (list) {
+    const db = require('nano')(process.env.DB_URL).use('secret_santa');
+    db.get(process.env.DB_DOC_NAME + '_matches', {}, function(err, prev_list) { //doc_name, query parameters, callback
+        if (err) {
+            console.error(err);
+            process.exit(1);
+        } else {
+            prev_list.list = {};
+            prev_list.list = list;
+            db.insert(prev_list, (err, resp) => {
+                if (err) {
+                    console.error(err);
+                    process.exit(1);
+                } else {
+                    console.log(resp);
+                }
+            });
+        }
+    });
 }
 
 //****************//
@@ -231,7 +252,7 @@ if (process.env.DB_URL === undefined) {
             }
 
             draw_names(secret_santa_list, significant_others, numbers);
-            send_emails();
+            send_emails(secret_santa_list);
         }
     });
 }
