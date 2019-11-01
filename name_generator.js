@@ -71,8 +71,8 @@ function draw_names(secret_santa_list, significant_others, numbers) {
                 }
             } else {
                 verify_final_list(final_list, secret_santa_list, significant_others, numbers);
-                console.log("Final List...");
-                console.log(final_list);
+                //console.log("Final List...");
+                //console.log(final_list);
                 save_final_list(final_list);
                 break;
             }
